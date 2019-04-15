@@ -1,0 +1,467 @@
+includes
+{
+   
+}
+ 
+variables
+{
+    long physHandle;
+    long cantpHandle;
+ 
+    char rspEvent[18] = "Diag Receved!";
+    byte rspData[100];
+    dword rspLen = 0;
+    
+    const dword physTx = 0x705;
+    const dword funcTx = 0x7DF;
+    const dword respRx = 0x785;
+    
+    const byte repeatSend = 1;
+    const byte cantpPadding = 0xAA;
+ 
+ 
+    struct fileInfo
+    {
+        long fileHandle;
+        char filePath[512];
+        dword maxAddr;
+        dword minAddr;
+        dword segNum;
+        dword segAddr[20];
+        dword segLen[20];
+        dword segOffset[20];
+        byte segData[1 * 1024 * 1024];
+    };
+    
+    struct reqPDU
+    {
+        byte addrMode;
+        long prevFunc;
+        char pduInfo[50];
+        char reqDataString[80];
+        char rspDataString[80];
+        long postFunc;
+    };
+ 
+    struct fileInfo file;
+    
+    enum funcDef
+    {
+        REQUEST_SEED_POST = 0,
+        SEND_KEY_PREV,
+        TRANS_DATA_DRIVER_PREV,
+        CHECK_DRIVER_PREV,
+        REQUEST_DOWN_APP_POST,
+        TRANS_DATA_APP_PREV,
+        CHECK_APP_PREV  
+    };
+    
+    struct reqPDU reqPduList[20] = 
+    {
+        {
+            addrMode = 'F',
+            prevFunc = 0,
+            pduInfo = "To ExtSession...",
+            reqDataString = "10 03 ",
+            rspDataString = "50 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'F',
+            prevFunc = 0,
+            pduInfo = "DTCSetting=off...",
+            reqDataString = "85 02 ",
+            rspDataString = "C5 "
+        },
+        {
+            addrMode = 'F',
+            prevFunc = 0,
+            pduInfo = "DisableCommunicat...",
+            reqDataString = "28 01 01 ",
+            rspDataString = "68 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'P',
+            prevFunc = 0,
+            pduInfo = "To ProgrammingSession...",
+            reqDataString = "10 02 ",
+            rspDataString = "50 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'P',
+            prevFunc = 0,
+            pduInfo = "RequestSeed...",
+            reqDataString = "27 11 ",
+            rspDataString = "67 ",
+            postFunc = REQUEST_SEED_POST
+        },
+        {
+ 
+            addrMode = 'P',
+            prevFunc = SEND_KEY_PREV,
+            pduInfo = "SendKey...",
+            reqDataString = "27 12 00 00 00 00 ",
+            rspDataString = "67 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'P',
+            prevFunc = 0,
+            pduInfo = "RequestDownloadFlashDriver...",
+            reqDataString = "34 00 44 00 00 04 00 00 00 00 40 ",
+            rspDataString = "74 "
+        },
+        {
+            addrMode = 'P',
+            prevFunc = TRANS_DATA_DRIVER_PREV,
+            pduInfo = "TransferData...",
+            reqDataString = "36 01 FF FF ",
+            rspDataString = "76 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'P',
+            prevFunc = 0,
+            pduInfo = "TransferExit...",
+            reqDataString = "37 ",
+            rspDataString = "77 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'P',
+            prevFunc = CHECK_DRIVER_PREV,
+            pduInfo = "CheckRoutine...",
+            reqDataString = "31 01 02 02 00 00 00 00",
+            rspDataString = "71 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'P',
+            prevFunc = 0,
+            pduInfo = "EraseMemory...",
+            reqDataString = "31 01 FF 00 44 00 3E 80 00 00 01 70 00 ",
+            rspDataString = "71 "
+        },
+        {
+            addrMode = 'P',
+            prevFunc = 0,
+            pduInfo = "HardReset...",
+            reqDataString = "11 01 ",
+            rspDataString = "51 ",
+            postFunc = 0
+        },
+        {
+            addrMode = 'F',
+            prevFunc = 0,
+            pduInfo = "To ExtSession...",
+            reqDataString = "10 03 ",
+            rspDataString = "",
+            postFunc = 0
+        },
+        {
+            addrMode = 'F',
+            prevFunc = 0,
+            pduInfo = "EnableCommunicat...",
+            reqDataString = "28 00 01 ",
+            rspDataString = "",
+            postFunc = 0
+        },
+        {
+            addrMode = 'F',
+            prevFunc = 0,
+            pduInfo = "DTCSetting=on...",
+            reqDataString = "85 01 ",
+            rspDataString = "",
+            postFunc = 0
+        },
+        {
+            addrMode = 'F',
+            prevFunc = 0,
+            pduInfo = "To DefSession...",
+            reqDataString = "10 01 ",
+            rspDataString = "",
+            postFunc = 0
+        }
+    };
+    
+    byte driverdata[100] = 
+	{
+		
+	};
+    
+    
+}
+ 
+dword crc32(byte data[], dword len)
+{
+	return crc ;
+}
+ 
+int userMemCmp(byte cs[], byte ct[], dword count)
+{
+    dword i;
+    int ret;
+    
+    ret = 0;
+    for(i = 0; i < count; i++)
+        if((ret = cs[i]-ct[i]) != 0)
+            break;
+        
+    return ret;    
+}
+ 
+void DownAppProcess(void)
+{
+    byte i;
+    long result, replyOk;
+    char info[80];
+    byte reqData[1024+16];
+    dword reqLen, sendLen;
+    byte seedArray[4], keyArray[4];
+    dword crc;
+    dword maxSize;
+    dword seqNo, offset;
+    dword expertLen;
+    byte expertData[20];
+    
+    @Pannel::ProgressBarPos = 0;
+    
+    maxSize = 1024;
+    seqNo = 0;
+    crc = 0;
+    offset = 0;
+    expertLen = 0;
+    
+    cantpHandle = CanTpCreateConnection(0);    // 0 = Normal mode
+    CanTpSetTxIdentifier(cantpHandle, physTx);  // Tx CAN-ID
+    CanTpSetRxIdentifier(cantpHandle, respRx);  // Rx CAN-ID
+    CanTpSetPadding(cantpHandle, cantpPadding);
+ 
+    
+    for(i = 0; i < 25; i++)
+    {
+        strncpy(info, reqPduList[i].pduInfo, elCount(reqPduList[i].pduInfo));
+        strncat(info, "start", elCount(info)-1);
+        write(info);
+        
+        reqLen = str2data(reqPduList[i].reqDataString, reqData);
+        
+        // prev data process
+        switch(reqPduList[i].prevFunc)
+        {
+            case SEND_KEY_PREV:
+                getKey(0x11, seedArray, keyArray);
+ 
+    			reqData[2] = keyArray[0];
+    			reqData[3] = keyArray[1];
+    			reqData[4] = keyArray[2];
+    			reqData[5] = keyArray[3];
+    			reqLen = 6;
+                break;
+            case TRANS_DATA_DRIVER_PREV:
+    			
+                reqLen = elCount(driverdata);
+                break;
+            case CHECK_DRIVER_PREV:		
+    			crc = crc32(driverdata, elCount(driverdata));
+    			//string2byte(cmd, cmddata, &cmdlen);
+    			reqData[0] = 0x31;
+    			reqData[1] = 0x01;
+    			reqData[2] = 0x02;
+    			reqData[3] = 0x02;
+    			reqData[4] = crc>>24;
+    			reqData[5] = crc>>16;
+    			reqData[6] = crc>>8;
+    			reqData[7] = crc;
+    			reqLen = 8;
+                break;
+            case TRANS_DATA_APP_PREV:
+    			reqLen = file.maxAddr-file.minAddr+1;
+                break;
+            case CHECK_APP_PREV:		
+    			crc = crc32(file.segData, (file.maxAddr-file.minAddr+1));
+                
+    			reqData[0] = 0x31;
+    			reqData[1] = 0x01;
+    			reqData[2] = 0x02;
+    			reqData[3] = 0x02;
+    			reqData[4] = crc>>24;
+    			reqData[5] = crc>>16;
+    			reqData[6] = crc>>8;
+    			reqData[7] = crc;
+    			reqLen = 8;
+                break;
+            default:
+                break;
+        }
+        
+        seqNo = 1;
+        while(reqLen > 0)
+        {
+            if(reqLen >= maxSize)
+            {
+                sendLen = maxSize;
+            }
+            else
+            {
+                sendLen = reqLen;
+            }
+            
+            if(reqPduList[i].prevFunc == TRANS_DATA_DRIVER_PREV)
+            {
+                reqData[0] = 0x36;
+    			reqData[1] = 0x01;
+    			memcpy_off(reqData, 2, driverdata, 0, elCount(driverdata));
+                result = CanTpTransmit(reqPduList[i].addrMode, reqData, sendLen+2, 500, 5000);
+                if(repeatSend == 1 && result == 0) // timeout repeat send
+                {
+                    testwaitfortimeout(50);
+                    result = CanTpTransmit(reqPduList[i].addrMode, reqData, sendLen+2, 500, 5000);
+                }
+            }
+            else if(reqPduList[i].prevFunc == TRANS_DATA_APP_PREV)
+            {
+                reqData[0] = 0x36;
+			    reqData[1] = seqNo++;
+                memcpy_off(reqData, 2, file.segData, offset, sendLen);
+                result = CanTpTransmit(reqPduList[i].addrMode, reqData, sendLen+2, 500, 5000);
+                if(repeatSend == 1 && result == 0)
+                {
+                    testwaitfortimeout(50);
+                    result = CanTpTransmit(reqPduList[i].addrMode, reqData, sendLen+2, 500, 5000);
+                }
+                offset += sendLen;
+            }
+            else
+            {
+                result = CanTpTransmit(reqPduList[i].addrMode, reqData, sendLen, 500, 5000);
+                if(repeatSend == 1 && result == 0) // timeout repeat send
+                {
+                    testwaitfortimeout(50);
+                    result = CanTpTransmit(reqPduList[i].addrMode, reqData, sendLen, 500, 5000);
+                }
+            }
+            if(@Pannel::ProgressBarPos < 150)
+            {
+                @Pannel::ProgressBarPos = @Pannel::ProgressBarPos+1;
+            }
+            
+            expertLen = str2data(reqPduList[i].rspDataString, expertData);
+            if((rspLen >= expertLen) && userMemCmp(expertData, rspData, expertLen) == 0)
+            {
+            }
+            else
+            {
+                //strncpy(info, reqPduList[i].pduInfo, elCount(reqPduList[i].pduInfo));
+                //strncat(info, "-------------err--------------", elCount(info)-1);
+                //write(info);
+                write("-------------err--------------");
+                SysSetVariableString(sysvar::Pannel::Info, "-------------ERROR--------------");
+                //mmsndPlay("track03.mp3", 5000);
+                {
+                    char SoundFilesPath[256];
+                    int kStringLen  = 256;
+                    
+                    getAbsFilePath("", SoundFilesPath, kStringLen);
+                    mmsndSetMediaPath(SoundFilesPath);
+                    mmsndPlay("track03.mp3", 0);
+                }
+                        
+                return;   
+            }
+            
+            reqLen -= sendLen;
+        }
+        
+        // post data process
+        switch(reqPduList[i].prevFunc)
+        {
+            case REQUEST_SEED_POST:
+                seedArray[0] = rspData[2];
+    			seedArray[1] = rspData[3];
+    			seedArray[2] = rspData[4];
+    			seedArray[3] = rspData[5];
+                break;
+            case REQUEST_DOWN_APP_POST:
+                maxSize = (rspData[2] << 8) + rspData[3] - 2;
+                break;
+            default:
+                break;
+        }
+        
+        strncpy(info, reqPduList[i].pduInfo, elCount(reqPduList[i].pduInfo));
+        strncat(info, "end", elCount(info)-1);
+        write(info);
+        
+        testwaitfortimeout(500);
+    }
+    
+    @Pannel::ProgressBarPos = 150;
+    SysSetVariableString(sysvar::Pannel::Info, "-------------SUCCESS--------------");
+}
+ 
+ 
+ 
+void CanTp_ReceptionInd(long connHandle, byte data[])
+{
+    //write("Recv handle %d, data %x", connHandle, data[0]);
+    memcpy(rspData, data, elCount(data));
+    rspLen = elCount(data);
+ 
+    TestSupplyTextEvent(rspEvent);
+}
+ 
+CanTp_ErrorInd( long connHandle, long error)
+{
+ 
+}
+ 
+long CanTpTransmit(byte addrMode, byte reqData[], dword reqLen, long timeOut, long timeOutPending)
+{
+    byte data[20], data2[20];
+    long ret, result, pending;
+ 
+    rspLen = 0;
+    
+    if(addrMode == 'P')
+    {
+        CanTpSetTxIdentifier(cantpHandle, physTx);
+    }
+    else
+    {
+        CanTpSetTxIdentifier(cantpHandle, funcTx);
+    }
+    testWaitForTimeout(20);
+    
+    CanTpSendData(cantpHandle, reqData, reqLen);
+ 
+    pending = 0;
+    do
+    {
+        result = testWaitForTextEvent(rspEvent, timeOut);
+        if(result == 0) // Resume due to timeout
+        {
+            ret = result;
+            rspLen = 0;
+            break;
+        }
+        else // Resume due to event occurred
+        {
+            if(rspLen == 3 && rspData[0] == 0x7F && rspData[1] == reqData[0] && rspData[2] == 0x78)
+            {
+                timeOut = timeOutPending;
+                rspLen = 0;
+                continue;
+            }
+            else
+            {
+                ret = result;
+                break;
+            }
+        }
+    }while(1);
+ 
+    return ret;
+}
